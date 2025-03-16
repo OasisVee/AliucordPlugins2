@@ -63,53 +63,27 @@ class MoreInfoModal(private val data: Map<String, Entry>) : SettingsPage() {
     }
 }
 
-private fun makeReq(url: String, method: String, contentType: String): Http.Request {
-    val chars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
-    val s = CharArray(10) { chars.random() }.joinToString("")
+private const val VIRUSTOTAL_API_KEY = "ceafdef0186869be0b48f50aa93ebf79441d540ab569e179f2e945bafad2abde" // Replace with your actual API key
 
+private fun makeReq(url: String, method: String, contentType: String): Http.Request {
     return Http.Request(url, method).apply {
         setHeader("Content-Type", contentType)
-        setHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:83.0) Firefox")
-        setHeader("X-Tool", "vt-ui-main")
-        setHeader("X-VT-Anti-Abuse-Header", s) // Can be anything for some reason
-        setHeader("Accept-Ianguage", "en-US,en;q=0.9,es;q=0.8") // yes upper case i lol
+        setHeader("User-Agent", "Aliucord Plugin") // More appropriate user agent.
+        setHeader("x-apikey", VIRUSTOTAL_API_KEY) // Add the API key header
     }
 }
 
 private fun checkLink(url: String): Map<String, Entry> {
     // Look up url in cache first
-    QueryBuilder("https://www.virustotal.com/ui/search").run {
-        append("limit", "20")
-        append("relationships[comment]", "author,item")
-        append("query", url)
+    val analysisId = makeReq("https://www.virustotal.com/api/v3/urls", "POST", "application/x-www-form-urlencoded")
+        .executeWithUrlEncodedForm(mapOf("url" to url))
+        .json(UrlIdInfo::class.java).data.id
 
-        makeReq(this.toString(), "GET", "application/json")
-            .execute()
-            .json(CachedUrlInfo::class.java)
-            .let { res ->
-                if (res.data.isNotEmpty()) return@checkLink res.data[0].attributes.last_analysis_results
-            }
-    }
-
-    // no cached data, make full request for url
-
-    // R.h.ster url to get an ID
-    val idInfo =
-        makeReq("https://www.virustotal.com/api/v3/ui/urls", "POST", "application/x-www-form-urlencoded")
-            .executeWithUrlEncodedForm(mapOf("url" to url))
-            .json(UrlIdInfo::class.java)
-
-    // Request analysis with that ID
-    return makeReq(
-        "https://www.virustotal.com/ui/analyses/" + idInfo.data.id,
-        "GET",
-        "application/json"
-    )
+    return makeReq("https://www.virustotal.com/api/v3/analyses/$analysisId", "GET", "application/json")
         .execute()
         .json(NewUrlInfo::class.java)
         .data.attributes.results
 }
-
 
 @AliucordPlugin
 class CheckLinks : Plugin() {

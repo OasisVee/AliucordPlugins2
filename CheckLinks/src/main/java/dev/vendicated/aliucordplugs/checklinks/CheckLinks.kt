@@ -63,23 +63,61 @@ class MoreInfoModal(private val data: Map<String, Entry>) : SettingsPage() {
     }
 }
 
-private const val VIRUSTOTAL_API_KEY = "YOUR_API_KEY_HERE" // Replace with your actual API key
+// Settings class for CheckLinks plugin with proper constructor
+class CheckLinksSettings : SettingsPage() {
+    @SuppressLint("SetTextI18n")
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        setActionBarTitle("CheckLinks Settings")
 
-private fun makeReq(url: String, method: String, contentType: String): Http.Request {
-    return Http.Request(url, method).apply {
-        setHeader("Content-Type", contentType)
-        setHeader("User-Agent", "Aliucord Plugin") // More appropriate user agent.
-        setHeader("x-apikey", VIRUSTOTAL_API_KEY) // Add the API key header
+        val ctx = view.context
+        val plugin = PluginManager.plugins["CheckLinks"] as CheckLinks
+        
+        com.aliucord.views.TextInput(ctx, "VirusTotal API Key").run {
+            editText.run {
+                maxLines = 1
+                setText(plugin.settings.getString("virusTotalApiKey", ""))
+                hint = "Enter your VirusTotal API key here"
+                
+                addTextChangedListener(object : com.discord.utilities.view.text.TextWatcher() {
+                    override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: android.text.Editable) {
+                        plugin.settings.setString("virusTotalApiKey", s.toString())
+                    }
+                })
+            }
+            
+            linearLayout.addView(this)
+        }
+        
+        TextView(ctx, null, 0, R.i.UiKit_Settings_Item_SubText).apply {
+            text = "You can get a free API key from virustotal.com. The plugin will not work without a valid API key."
+            linearLayout.addView(this)
+        }
     }
 }
 
-private fun checkLink(url: String): Map<String, Entry> {
+private fun makeReq(url: String, method: String, contentType: String, apiKey: String): Http.Request {
+    return Http.Request(url, method).apply {
+        setHeader("Content-Type", contentType)
+        setHeader("User-Agent", "Aliucord Plugin") // More appropriate user agent.
+        setHeader("x-apikey", apiKey) // Add the API key from settings
+    }
+}
+
+private fun checkLink(url: String, apiKey: String): Map<String, Entry> {
+    // Check if API key is provided
+    if (apiKey.isEmpty() || apiKey.trim().isEmpty()) {
+        throw Exception("No VirusTotal API key provided. Please set it in the plugin settings.")
+    }
+    
     // Look up url in cache first
-    val analysisId = makeReq("https://www.virustotal.com/api/v3/urls", "POST", "application/x-www-form-urlencoded")
+    val analysisId = makeReq("https://www.virustotal.com/api/v3/urls", "POST", "application/x-www-form-urlencoded", apiKey)
         .executeWithUrlEncodedForm(mapOf("url" to url))
         .json(UrlIdInfo::class.java).data.id
 
-    return makeReq("https://www.virustotal.com/api/v3/analyses/$analysisId", "GET", "application/json")
+    return makeReq("https://www.virustotal.com/api/v3/analyses/$analysisId", "GET", "application/json", apiKey)
         .execute()
         .json(NewUrlInfo::class.java)
         .data.attributes.results
@@ -87,6 +125,10 @@ private fun checkLink(url: String): Map<String, Entry> {
 
 @AliucordPlugin
 class CheckLinks : Plugin() {
+    init {
+        settingsTab = SettingsTab(CheckLinksSettings::class.java)
+    }
+    
     @SuppressLint("SetTextI18n")
     override fun start(ctx: Context) {
         var getBinding: Method? = null
@@ -118,8 +160,17 @@ class CheckLinks : Plugin() {
                 Utils.threadPool.execute {
                     var content: String
                     var data: Map<String, Entry>? = null
+                    
                     try {
-                        data = checkLink(url)
+                        // Get API key from settings
+                        val apiKey = settings.getString("virusTotalApiKey", "")
+                        
+                        // Check if API key is provided
+                        if (apiKey.isEmpty() || apiKey.trim().isEmpty()) {
+                            throw Exception("No VirusTotal API key provided. Please set it in the plugin settings.")
+                        }
+                        
+                        data = checkLink(url, apiKey)
 
                         val counts = IntArray(4)
                         data.values.forEach { v ->
@@ -139,21 +190,27 @@ class CheckLinks : Plugin() {
                                 "URL $url is either safe or too new to be flagged."
                     } catch (th: Throwable) {
                         Logger("[CheckLinks]").error("Failed to check link $url", th)
-                        content = "Failed to check URL $url. Proceed at your own risk."
+                        content = "Failed to check URL $url: ${th.message ?: "Unknown error"}. " +
+                                "Please check your VirusTotal API key in settings."
                     }
 
                     if (data != null) content += "\n\nMore Info"
 
                     SpannableString(content).run {
                         val urlIdx = content.indexOf(url)
-                        setSpan(URLSpan(url), urlIdx, urlIdx + url.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        if (urlIdx >= 0) {
+                            setSpan(URLSpan(url), urlIdx, urlIdx + url.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
 
                         data?.let {
-                            setSpan(object : ClickableSpan() {
-                                override fun onClick(view: View) {
-                                    Utils.openPageWithProxy(view.context, MoreInfoModal(it))
-                                }
-                            }, content.length - 9, content.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            val moreInfoIdx = content.lastIndexOf("More Info")
+                            if (moreInfoIdx >= 0) {
+                                setSpan(object : ClickableSpan() {
+                                    override fun onClick(view: View) {
+                                        Utils.openPageWithProxy(view.context, MoreInfoModal(it))
+                                    }
+                                }, moreInfoIdx, moreInfoIdx + 9, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            }
                         }
 
                         Utils.mainThread.post {

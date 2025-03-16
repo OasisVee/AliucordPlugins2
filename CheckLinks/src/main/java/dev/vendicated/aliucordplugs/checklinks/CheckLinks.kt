@@ -63,7 +63,7 @@ class MoreInfoModal(private val data: Map<String, Entry>) : SettingsPage() {
     }
 }
 
-private const val VIRUSTOTAL_API_KEY = "ceafdef0186869be0b48f50aa93ebf79441d540ab569e179f2e945bafad2abde" // Replace with your actual API key
+private const val VIRUSTOTAL_API_KEY = "YOUR_API_KEY_HERE" // Replace with your actual API key
 
 private fun makeReq(url: String, method: String, contentType: String): Http.Request {
     return Http.Request(url, method).apply {

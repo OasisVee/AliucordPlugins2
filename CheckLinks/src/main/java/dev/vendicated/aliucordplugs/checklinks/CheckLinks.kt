@@ -78,7 +78,7 @@ private fun makeReq(url: String, method: String, contentType: String): Http.Requ
 
 private fun checkLink(url: String): Map<String, Entry> {
     // Look up url in cache first
-    QueryBuilder("https://www.virustotal.com/ui/search").run {
+    QueryBuilder("https://www.virustotal.com/api/v3/ui/search").run {
         append("limit", "20")
         append("relationships[comment]", "author,item")
         append("query", url)
@@ -95,13 +95,13 @@ private fun checkLink(url: String): Map<String, Entry> {
 
     // R.h.ster url to get an ID
     val idInfo =
-        makeReq("https://www.virustotal.com/ui/urls", "POST", "application/x-www-form-urlencoded")
+        makeReq("https://www.virustotal.com/api/v3/ui/urls", "POST", "application/x-www-form-urlencoded")
             .executeWithUrlEncodedForm(mapOf("url" to url))
             .json(UrlIdInfo::class.java)
 
     // Request analysis with that ID
     return makeReq(
-        "https://www.virustotal.com/ui/analyses/" + idInfo.data.id,
+        "https://www.virustotal.com/api/v3/ui/analyses/" + idInfo.data.id,
         "GET",
         "application/json"
     )

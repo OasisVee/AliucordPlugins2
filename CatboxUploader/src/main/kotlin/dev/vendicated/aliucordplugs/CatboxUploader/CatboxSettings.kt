@@ -1,14 +1,13 @@
 package dev.vendicated.aliucordplugs.CatboxUploader
 
-import android.content.Context
-import android.os.Bundle
 import android.view.View
 import com.aliucord.Utils
 import com.aliucord.api.SettingsAPI
-import com.aliucord.widgets.BottomSheet
+import com.aliucord.fragments.BottomSheet
 import com.discord.views.CheckedSetting
+import android.os.Bundle
 
-class PluginSettings(private val settings: SettingsAPI) : BottomSheet() {
+class CatboxSettings(private val settings: SettingsAPI) : BottomSheet() {
     override fun onViewCreated(view: View, bundle: Bundle?) {
         super.onViewCreated(view, bundle)
         
@@ -19,7 +18,7 @@ class PluginSettings(private val settings: SettingsAPI) : BottomSheet() {
             "Automatically upload files to catbox.moe"
         ).apply {
             isChecked = settings.getBool("enabled", true)
-            setOnCheckedListener { settings.setBool("enabled", it) }
+            setOnCheckedListener { checked -> settings.setBool("enabled", checked) }
         })
         
         addView(Utils.createCheckedSetting(
@@ -29,7 +28,7 @@ class PluginSettings(private val settings: SettingsAPI) : BottomSheet() {
             "Enable to upload any file type, disable to upload images only"
         ).apply {
             isChecked = settings.getBool("all_types", false)
-            setOnCheckedListener { settings.setBool("all_types", it) }
+            setOnCheckedListener { checked -> settings.setBool("all_types", checked) }
         })
     }
 }

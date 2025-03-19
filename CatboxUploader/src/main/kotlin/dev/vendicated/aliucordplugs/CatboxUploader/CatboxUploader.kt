@@ -15,12 +15,13 @@ import com.discord.widgets.chat.MessageContent
 import com.discord.widgets.chat.MessageManager
 import com.discord.widgets.chat.input.ChatInputViewModel
 import com.lytefast.flexinput.model.Attachment
+import com.aliucord.fragments.BottomSheet
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
-@AliucordPlugin
+@AliucordPlugin(requiresRestart = false)
 class CatboxUploader : Plugin() {
     private val logger = Logger("CatboxUploader")
     private val supportedImageTypes = setOf("png", "jpg", "jpeg", "webp", "gif")
@@ -34,7 +35,7 @@ class CatboxUploader : Plugin() {
     }
     
     init {
-        settingsTab = SettingsTab(PluginSettings::class.java).withArgs(settings)
+        settingsTab = SettingsTab(CatboxSettings::class.java).withArgs(settings)
     }
     
     override fun start(ctx: Context) {
@@ -43,37 +44,12 @@ class CatboxUploader : Plugin() {
     }
 
     private fun setupCommands() {
-        val commandOptions = listOf(
-            Utils.createCommandOption(
-                ApplicationCommandType.BOOLEAN,
-                "enabled",
-                "Enable or disable the uploader",
-                required = true
-            ),
-            Utils.createCommandOption(
-                ApplicationCommandType.BOOLEAN,
-                "all_types",
-                "Allow all file types or images only",
-                required = false
-            )
-        )
-
-        commands.registerCommand(
-            "catbox",
-            "Configure Catbox.moe uploader",
-            commandOptions
-        ) { ctx ->
-            val enabled = ctx.getBool("enabled")
-            settings.setBool("enabled", enabled)
-
-            ctx.getBool("all_types")?.let { allTypes ->
-                settings.setBool("all_types", allTypes)
-            }
-
+        commands.registerCommand("catbox", "Configure Catbox.moe uploader") { ctx ->
+            val isEnabled = settings.getBool("enabled", true)
+            settings.setBool("enabled", !isEnabled)
+            
             return@registerCommand CommandResult(
-                "Catbox.moe uploader settings updated:\n" +
-                "• Enabled: ${if (enabled) "Yes ✅" else "No ❌"}\n" +
-                "• File Types: ${if (settings.getBool("all_types", false)) "All files" else "Images only"}",
+                "Catbox.moe uploader is now ${if (!isEnabled) "enabled" else "disabled"}",
                 null,
                 false
             )

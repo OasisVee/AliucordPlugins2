@@ -94,7 +94,7 @@ class CatboxUploader : Plugin() {
             "Configure Catbox.moe uploader",
             cmdOptions
         ) { commandContext ->
-            val isEnabled = (commandContext.getOption("enabled")?.value as? Boolean) ?: false
+            val isEnabled = ctx.getBool("enabled") ?: false
             settings.setBool("enabled", isEnabled)
             
             CommandResult(

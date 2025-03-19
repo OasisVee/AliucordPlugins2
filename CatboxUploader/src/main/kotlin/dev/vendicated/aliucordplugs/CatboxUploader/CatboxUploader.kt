@@ -1,4 +1,4 @@
-package com.catboxuploader.plugins
+package dev.vendicated.aliucordplugs.CatboxUploader
 
 import android.content.Context
 import android.net.Uri
@@ -38,8 +38,46 @@ class CatboxUploader : Plugin() {
     }
     
     override fun start(ctx: Context) {
-        registerCommands()
+        setupCommands()
         setupMessagePatcher()
+    }
+
+    private fun setupCommands() {
+        val commandOptions = listOf(
+            Utils.createCommandOption(
+                ApplicationCommandType.BOOLEAN,
+                "enabled",
+                "Enable or disable the uploader",
+                required = true
+            ),
+            Utils.createCommandOption(
+                ApplicationCommandType.BOOLEAN,
+                "all_types",
+                "Allow all file types or images only",
+                required = false
+            )
+        )
+
+        commands.registerCommand(
+            "catbox",
+            "Configure Catbox.moe uploader",
+            commandOptions
+        ) { ctx ->
+            val enabled = ctx.getBool("enabled")
+            settings.setBool("enabled", enabled)
+
+            ctx.getBool("all_types")?.let { allTypes ->
+                settings.setBool("all_types", allTypes)
+            }
+
+            return@registerCommand CommandResult(
+                "Catbox.moe uploader settings updated:\n" +
+                "• Enabled: ${if (enabled) "Yes ✅" else "No ❌"}\n" +
+                "• File Types: ${if (settings.getBool("all_types", false)) "All files" else "Images only"}",
+                null,
+                false
+            )
+        }
     }
     
     private fun uploadToCatbox(file: File): String {

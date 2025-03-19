@@ -92,9 +92,16 @@ class CatboxUploader : Plugin() {
         commands.registerCommand(
             "catbox",
             "Configure Catbox.moe uploader",
-            cmdOptions
-        ) { commandContext ->
-            val isEnabled = ctx.getBool("enabled") ?: false
+            listOf(
+                Utils.createCommandOption(
+                    ApplicationCommandType.BOOLEAN,
+                    "enabled",
+                    "Enable or disable the uploader",
+                    required = true
+                )
+            )
+        ) { ctx ->
+            val isEnabled = ctx.getRequiredBoolean("enabled")
             settings.setBool("enabled", isEnabled)
             
             CommandResult(

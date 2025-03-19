@@ -1,6 +1,8 @@
 version = "3.6.6"
 description = "Apply custom themes to your Discord"
 
+aliucord.author("Vendicated", 343383572805058560L)
+
 aliucord.changelog.set(
     """
 

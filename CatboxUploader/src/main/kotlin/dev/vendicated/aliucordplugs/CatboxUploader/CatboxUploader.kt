@@ -1,7 +1,6 @@
 package dev.vendicated.aliucordplugs.CatboxUploader
 
 import android.content.Context
-import android.net.Uri
 import android.webkit.MimeTypeMap
 import com.aliucord.Http
 import com.aliucord.Logger
@@ -9,7 +8,8 @@ import com.aliucord.Utils
 import com.aliucord.entities.Plugin
 import com.aliucord.annotations.AliucordPlugin
 import com.aliucord.patcher.before
-import com.aliucord.api.CommandsAPI.CommandResult
+import com.aliucord.api.CommandsAPI
+import com.aliucord.entities.CommandContext
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.widgets.chat.MessageContent
 import com.discord.widgets.chat.MessageManager
@@ -17,8 +17,6 @@ import com.discord.widgets.chat.input.ChatInputViewModel
 import com.lytefast.flexinput.model.Attachment
 import java.io.File
 import java.io.IOException
-import java.lang.IndexOutOfBoundsException
-import org.json.JSONObject
 
 private fun newUpload(file: File, config: Config, logger: Logger): String {
     val lock = Object()
@@ -55,7 +53,7 @@ private fun newUpload(file: File, config: Config, logger: Logger): String {
     }
     
     try {
-        logger.debug("JSON FORMATTED:\n${JSONObject(result.toString()).toString(4)}")
+        logger.debug("JSON FORMATTED:\n${org.json.JSONObject(result.toString()).toString(4)}")
         logger.debug("API RAW RESPONSE:\n${result}")
     } catch (e: Exception) {
         logger.debug("API RESPONSE:\n${result}")
@@ -80,31 +78,24 @@ class CatboxUploader : Plugin() {
     private fun MessageContent.set(text: String) = textContentField.set(this, text)
     
     override fun start(ctx: Context) {
-        val cmdOptions = listOf(
-            Utils.createCommandOption(
-                ApplicationCommandType.BOOLEAN,
-                "enabled",
-                "Enable or disable the uploader",
-                required = true
-            )
-        )
-
         commands.registerCommand(
             "catbox",
             "Configure Catbox.moe uploader",
             listOf(
-                Utils.createCommandOption(
+                CommandsAPI.CommandOption(
                     ApplicationCommandType.BOOLEAN,
                     "enabled",
                     "Enable or disable the uploader",
-                    required = true
+                    required = true,
+                    default = true
                 )
             )
-        ) { ctx ->
-            val isEnabled = ctx.getRequiredBoolean("enabled")
+        ) { commandContext: CommandContext ->
+            val args = commandContext.arguments
+            val isEnabled = args["enabled"] as? Boolean ?: true
             settings.setBool("enabled", isEnabled)
             
-            CommandResult(
+            CommandsAPI.CommandResult(
                 "Catbox.moe uploader is now ${if (isEnabled) "enabled" else "disabled"}",
                 null,
                 false

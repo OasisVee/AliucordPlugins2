@@ -3,7 +3,6 @@ package com.catboxuploader.plugins
 import android.content.Context
 import android.net.Uri
 import android.webkit.MimeTypeMap
-
 import com.aliucord.Http
 import com.aliucord.Logger
 import com.aliucord.Utils
@@ -16,7 +15,6 @@ import com.discord.widgets.chat.MessageContent
 import com.discord.widgets.chat.MessageManager
 import com.discord.widgets.chat.input.ChatInputViewModel
 import com.lytefast.flexinput.model.Attachment
-
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
@@ -24,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 @AliucordPlugin
 class CatboxUploader : Plugin() {
-    
     private val logger = Logger("CatboxUploader")
     private val supportedImageTypes = setOf("png", "jpg", "jpeg", "webp", "gif")
     
@@ -89,7 +86,11 @@ class CatboxUploader : Plugin() {
                 ctx.containsArg("toggle") -> {
                     val enabled = ctx.getSubCommandArgs("toggle")?.get("enabled").toString().toBoolean()
                     settings.setBool("enabled", enabled)
-                    CommandResult("Catbox.moe uploader is now ${if (enabled) "enabled" else "disabled"}", null, false)
+                    CommandResult(
+                        "Catbox.moe uploader is now ${if (enabled) "enabled" else "disabled"}",
+                        null,
+                        false
+                    )
                 }
                 
                 ctx.containsArg("status") -> {
@@ -108,7 +109,11 @@ class CatboxUploader : Plugin() {
                 ctx.containsArg("types") -> {
                     val allTypes = ctx.getSubCommandArgs("types")?.get("all_types").toString().toBoolean()
                     settings.setBool("all_types", allTypes)
-                    CommandResult("File type setting updated. ${if (allTypes) "All file types will be uploaded." else "Only images will be uploaded."}", null, false)
+                    CommandResult(
+                        "File type setting updated. ${if (allTypes) "All file types will be uploaded." else "Only images will be uploaded."}",
+                        null,
+                        false
+                    )
                 }
                 
                 else -> CommandResult("Invalid command. Try /catbox status", null, false)
@@ -234,11 +239,9 @@ class CatboxUploader : Plugin() {
         try {
             return future.get(15, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            // Instead of throwing an IOException, log the error and return an error message
             logger.error("Upload timed out or failed", e)
             return "ERROR: Upload timed out or failed"
         } finally {
-            // Try to delete the temp file
             try {
                 file.delete()
             } catch (e: Exception) {

@@ -80,21 +80,25 @@ class CatboxUploader : Plugin() {
     private fun MessageContent.set(text: String) = textContentField.set(this, text)
     
     override fun start(ctx: Context) {
-        commands.registerCommand("catbox", "Configure Catbox.moe uploader",
-            listOf(
-                Utils.createCommandOption(
-                    ApplicationCommandType.BOOLEAN,
-                    "enabled",
-                    "Enable or disable the uploader",
-                    required = true
-                )
+        val cmdOptions = listOf(
+            Utils.createCommandOption(
+                ApplicationCommandType.BOOLEAN,
+                "enabled",
+                "Enable or disable the uploader",
+                required = true
             )
-        ) { ctx ->
-            val enabled = ctx.getBool("enabled") ?:
-            settings.setBool("enabled", enabled)
+        )
+
+        commands.registerCommand(
+            "catbox",
+            "Configure Catbox.moe uploader",
+            cmdOptions
+        ) { commandContext ->
+            val isEnabled = (commandContext.getOption("enabled")?.value as? Boolean) ?: false
+            settings.setBool("enabled", isEnabled)
             
-            return@registerCommand CommandResult(
-                "Catbox.moe uploader is now ${if (enabled) "enabled" else "disabled"}",
+            CommandResult(
+                "Catbox.moe uploader is now ${if (isEnabled) "enabled" else "disabled"}",
                 null,
                 false
             )
@@ -119,7 +123,8 @@ class CatboxUploader : Plugin() {
                 return@before 
             }
             
-            if (!settings.getBool("enabled", true)) {
+            val isEnabled = settings.getBool("enabled", true)
+            if (!isEnabled) {
                 return@before
             }
             
@@ -130,8 +135,9 @@ class CatboxUploader : Plugin() {
             
             val mime = MimeTypeMap.getSingleton()
                 .getExtensionFromMimeType(context.contentResolver.getType(firstAttachment.uri))
-                
-            if (!settings.getBool("all_types", false) && mime !in supportedImageTypes) {
+            
+            val allowAllTypes = settings.getBool("all_types", false)
+            if (!allowAllTypes && (mime == null || mime !in supportedImageTypes)) {
                 return@before
             }
             

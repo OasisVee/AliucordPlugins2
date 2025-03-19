@@ -17,9 +17,51 @@ import com.discord.widgets.chat.input.ChatInputViewModel
 import com.lytefast.flexinput.model.Attachment
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 import java.lang.IndexOutOfBoundsException
+import org.json.JSONObject
+
+private fun newUpload(file: File, config: Config, logger: Logger): String {
+    val lock = Object()
+    val result = StringBuilder()
+
+    synchronized(lock) {
+        Utils.threadPool.execute {
+            try {
+                val params = mutableMapOf<String, Any>()
+                val request = Http.Request(config.RequestURL, config.RequestType)
+
+                config.Headers?.forEach { (key, value) ->
+                    request.setHeader(key, value)
+                }
+
+                config.Arguments?.forEach { (key, value) ->
+                    params[key] = value
+                }
+                params[config.FileFormName] = file
+
+                result.append(request.executeWithMultipartForm(params).text())
+            } catch (ex: Throwable) {
+                if (ex is IOException) {
+                    logger.debug("${ex.message} | ${ex.cause} | $ex | ${ex.printStackTrace()}")
+                }
+                logger.error(ex)
+            } finally {
+                synchronized(lock) {
+                    lock.notifyAll()
+                }
+            }
+        }
+        lock.wait(9_000)
+    }
+    
+    try {
+        logger.debug("JSON FORMATTED:\n${JSONObject(result.toString()).toString(4)}")
+        logger.debug("API RAW RESPONSE:\n${result}")
+    } catch (e: Exception) {
+        logger.debug("API RESPONSE:\n${result}")
+    }
+    return result.toString()
+}
 
 @AliucordPlugin
 class CatboxUploader : Plugin() {
@@ -29,6 +71,7 @@ class CatboxUploader : Plugin() {
 
     private val logger = Logger("CatboxUploader")
     private val supportedImageTypes = setOf("png", "jpg", "jpeg", "webp", "gif")
+    private val config = Config()
     
     private val textContentField = MessageContent::class.java.getDeclaredField("textContent").apply { 
         isAccessible = true 
@@ -114,36 +157,12 @@ class CatboxUploader : Plugin() {
             }
             
             try {
-                val lock = Object()
-                val result = StringBuilder()
-                
-                synchronized(lock) {
-                    Utils.threadPool.execute {
-                        try {
-                            val params = mutableMapOf<String, Any>()
-                            val request = Http.Request("https://catbox.moe/user/api.php", "POST")
-                            
-                            params["reqtype"] = "fileupload"
-                            params["fileToUpload"] = file
-                            
-                            result.append(request.executeWithMultipartForm(params).text())
-                        } catch (e: Exception) {
-                            logger.error("Upload failed", e)
-                        } finally {
-                            synchronized(lock) {
-                                lock.notifyAll()
-                            }
-                        }
-                    }
-                    lock.wait(9000)
+                val response = newUpload(file, config, logger)
+                if (response.isBlank() || !response.trim().startsWith("https://")) {
+                    throw IOException("Invalid response from server: $response")
                 }
                 
-                val url = result.toString().trim()
-                if (url.isBlank() || !url.startsWith("https://")) {
-                    throw IOException("Invalid response from server: $url")
-                }
-                
-                content.set("$plainText\n$url")
+                content.set("$plainText\n${response.trim()}")
                 it.args[2] = content
                 it.args[3] = emptyList<Attachment<*>>()
                 

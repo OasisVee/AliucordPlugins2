@@ -1,16 +1,13 @@
-package com.catboxuploader.plugins
+package dev.vendicated.aliucordplugs.CatboxUploader
 
-// source: https://github.com/tsudoko/xshare/blob/master/app/src/main/java/re/flande/xshare/Uploader.kt#L13
-data class Config
-(
-        var Name: String?,
-        var DestinationType: String?,
-        var RequestType: String = "POST",    // important
-        var RequestURL: String?,             // important
-        var FileFormName: String?,           // important
-        var Headers: Map<String, String>?,
-        var Arguments: Map<String, String>?,
-        //var RegexList: Array<String>?,
-        var ResponseType: String?,
-        var URL: String?
+data class Config(
+    var Name: String = "Catbox",
+    var DestinationType: String = "ImageUploader",
+    var RequestType: String = "POST",
+    var RequestURL: String = "https://catbox.moe/user/api.php",
+    var FileFormName: String = "fileToUpload",
+    var Headers: Map<String, String>? = null,
+    var Arguments: Map<String, String> = mapOf("reqtype" to "fileupload"),
+    var ResponseType: String = "URL",
+    var URL: String? = null
 )

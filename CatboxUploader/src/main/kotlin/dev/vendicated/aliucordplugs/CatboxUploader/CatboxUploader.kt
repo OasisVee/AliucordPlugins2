@@ -240,7 +240,7 @@ class CatboxUploader : Plugin() {
             return future.get(15, TimeUnit.SECONDS)
         } catch (e: Exception) {
             logger.error("Upload timed out or failed", e)
-            return "ERROR: Upload timed out or failed"
+            throw IOException("ERROR: Upload timed out or failed", e)
         } finally {
             try {
                 file.delete()

@@ -234,9 +234,9 @@ class CatboxUploader : Plugin() {
         try {
             return future.get(15, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            // The issue is likely here, where we're using the wrong constructor for IOException
-            // Fix: Use a single parameter constructor instead
-            throw IOException("Upload timed out or failed: ${e.message}")
+            // Instead of throwing an IOException, log the error and return an error message
+            logger.error("Upload timed out or failed", e)
+            return "ERROR: Upload timed out or failed"
         } finally {
             // Try to delete the temp file
             try {

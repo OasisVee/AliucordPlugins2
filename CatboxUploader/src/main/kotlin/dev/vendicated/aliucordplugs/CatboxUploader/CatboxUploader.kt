@@ -90,7 +90,7 @@ class CatboxUploader : Plugin() {
                 )
             )
         ) { ctx ->
-            val enabled = ctx.getBool("enabled")
+            val enabled = ctx.getBool("enabled") ?:
             settings.setBool("enabled", enabled)
             
             return@registerCommand CommandResult(

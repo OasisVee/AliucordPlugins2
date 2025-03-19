@@ -15,14 +15,18 @@ import com.discord.widgets.chat.MessageContent
 import com.discord.widgets.chat.MessageManager
 import com.discord.widgets.chat.input.ChatInputViewModel
 import com.lytefast.flexinput.model.Attachment
-import com.aliucord.fragments.BottomSheet
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.lang.IndexOutOfBoundsException
 
-@AliucordPlugin(requiresRestart = false)
+@AliucordPlugin
 class CatboxUploader : Plugin() {
+    init {
+        settingsTab = SettingsTab(CatboxSettings::class.java).withArgs(settings)
+    }
+
     private val logger = Logger("CatboxUploader")
     private val supportedImageTypes = setOf("png", "jpg", "jpeg", "webp", "gif")
     
@@ -30,73 +34,29 @@ class CatboxUploader : Plugin() {
         isAccessible = true 
     }
     
-    private fun MessageContent.setTextContent(text: String) {
-        textContentField.set(this, text)
-    }
-    
-    init {
-        settingsTab = SettingsTab(CatboxSettings::class.java).withArgs(settings)
-    }
+    private fun MessageContent.set(text: String) = textContentField.set(this, text)
     
     override fun start(ctx: Context) {
-        setupCommands()
-        setupMessagePatcher()
-    }
-
-    private fun setupCommands() {
-        commands.registerCommand("catbox", "Configure Catbox.moe uploader") { ctx ->
-            val isEnabled = settings.getBool("enabled", true)
-            settings.setBool("enabled", !isEnabled)
+        commands.registerCommand("catbox", "Configure Catbox.moe uploader",
+            listOf(
+                Utils.createCommandOption(
+                    ApplicationCommandType.BOOLEAN,
+                    "enabled",
+                    "Enable or disable the uploader",
+                    required = true
+                )
+            )
+        ) { ctx ->
+            val enabled = ctx.getBool("enabled")
+            settings.setBool("enabled", enabled)
             
             return@registerCommand CommandResult(
-                "Catbox.moe uploader is now ${if (!isEnabled) "enabled" else "disabled"}",
+                "Catbox.moe uploader is now ${if (enabled) "enabled" else "disabled"}",
                 null,
                 false
             )
         }
-    }
-    
-    private fun uploadToCatbox(file: File): String {
-        val future = CompletableFuture<String>()
-        
-        Utils.threadPool.execute {
-            try {
-                val params = mutableMapOf<String, Any>()
-                val request = Http.Request("https://catbox.moe/user/api.php", "POST")
-                
-                params["reqtype"] = "fileupload"
-                params["fileToUpload"] = file
-                
-                val response = request.executeWithMultipartForm(params).text()
-                if (response.isBlank()) {
-                    throw IllegalStateException("Server returned empty response")
-                }
-                future.complete(response.trim())
-            } catch (throwable: Throwable) {
-                logger.error("Upload failed", throwable)
-                future.completeExceptionally(throwable)
-            }
-        }
-        
-        return try {
-            val result = future.get(15, TimeUnit.SECONDS)
-            if (!result.startsWith("https://")) {
-                throw IllegalStateException("Invalid response from server: $result")
-            }
-            result
-        } catch (throwable: Throwable) {
-            logger.error("Upload timed out or failed", throwable)
-            throw throwable
-        } finally {
-            try {
-                file.delete()
-            } catch (e: Exception) {
-                logger.error("Failed to delete temp file", e)
-            }
-        }
-    }
 
-    private fun setupMessagePatcher() {
         patcher.before<ChatInputViewModel>(
             "sendMessage",
             Context::class.java,
@@ -107,75 +67,98 @@ class CatboxUploader : Plugin() {
             Function1::class.java
         ) {
             val context = it.args[0] as Context
-            val messageContent = it.args[2] as MessageContent
+            val content = it.args[2] as MessageContent
+            val plainText = content.textContent
             val attachments = (it.args[3] as List<Attachment<*>>).toMutableList()
+            val firstAttachment = try { 
+                attachments[0] 
+            } catch (t: IndexOutOfBoundsException) { 
+                return@before 
+            }
             
-            if (attachments.isEmpty() || !settings.getBool("enabled", true)) {
+            if (!settings.getBool("enabled", true)) {
                 return@before
             }
             
             if (attachments.size > 1) {
-                Utils.showToast("Catbox Uploader: Only one file at a time is supported", true)
+                Utils.showToast("Catbox Uploader: Multiple attachments not supported", true)
                 return@before
             }
             
-            val attachment = attachments[0]
-            val fileUri = attachment.uri
-            val mimeType = context.contentResolver.getType(fileUri)
-            
-            if (!shouldUploadFileType(mimeType, context)) {
-                return@before
-            }
-            
-            val file = try {
-                getFileFromUri(fileUri, context)
-            } catch (throwable: Throwable) {
-                logger.error("Failed to get file from URI", throwable)
-                Utils.showToast("Catbox Uploader: Failed to process file", true)
+            val mime = MimeTypeMap.getSingleton()
+                .getExtensionFromMimeType(context.contentResolver.getType(firstAttachment.uri))
+                
+            if (!settings.getBool("all_types", false) && mime !in supportedImageTypes) {
                 return@before
             }
             
             Utils.showToast("Catbox Uploader: Uploading to catbox.moe...", false)
             
+            val file = try {
+                val inputStream = context.contentResolver.openInputStream(firstAttachment.uri)
+                    ?: throw IOException("Failed to open input stream")
+                
+                val tempFile = File.createTempFile("catbox_upload", null, context.cacheDir)
+                tempFile.deleteOnExit()
+                
+                inputStream.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                tempFile
+            } catch (e: Exception) {
+                logger.error("Failed to process file", e)
+                Utils.showToast("Catbox Uploader: Failed to process file", true)
+                return@before
+            }
+            
             try {
-                val url = uploadToCatbox(file)
-                val originalText = messageContent.textContent
-                val newText = if (originalText.isNullOrBlank()) url else "$originalText\n$url"
-                messageContent.setTextContent(newText)
-                it.args[2] = messageContent
+                val lock = Object()
+                val result = StringBuilder()
+                
+                synchronized(lock) {
+                    Utils.threadPool.execute {
+                        try {
+                            val params = mutableMapOf<String, Any>()
+                            val request = Http.Request("https://catbox.moe/user/api.php", "POST")
+                            
+                            params["reqtype"] = "fileupload"
+                            params["fileToUpload"] = file
+                            
+                            result.append(request.executeWithMultipartForm(params).text())
+                        } catch (e: Exception) {
+                            logger.error("Upload failed", e)
+                        } finally {
+                            synchronized(lock) {
+                                lock.notifyAll()
+                            }
+                        }
+                    }
+                    lock.wait(9000)
+                }
+                
+                val url = result.toString().trim()
+                if (url.isBlank() || !url.startsWith("https://")) {
+                    throw IOException("Invalid response from server: $url")
+                }
+                
+                content.set("$plainText\n$url")
+                it.args[2] = content
                 it.args[3] = emptyList<Attachment<*>>()
                 
                 Utils.showToast("Catbox Uploader: Upload complete!", false)
-            } catch (throwable: Throwable) {
-                logger.error("Upload failed", throwable)
+            } catch (e: Exception) {
+                logger.error("Upload failed", e)
                 Utils.showToast("Catbox Uploader: Upload failed", true)
+            } finally {
+                try {
+                    file.delete()
+                } catch (e: Exception) {
+                    logger.error("Failed to delete temp file", e)
+                }
             }
         }
-    }
-    
-    private fun shouldUploadFileType(mimeType: String?, context: Context): Boolean {
-        if (settings.getBool("all_types", false)) {
-            return true
-        }
-        
-        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-        return extension in supportedImageTypes
-    }
-    
-    private fun getFileFromUri(uri: Uri, context: Context): File {
-        val inputStream = context.contentResolver.openInputStream(uri)
-            ?: throw IOException("Failed to open input stream")
-        
-        val tempFile = File.createTempFile("catbox_upload", null, context.cacheDir)
-        tempFile.deleteOnExit()
-        
-        inputStream.use { input ->
-            tempFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-        
-        return tempFile
     }
     
     override fun stop(ctx: Context) {

@@ -21,4 +21,4 @@ include(":Hastebin")
 include(":UrbanDictionary")
 include(":JsEval")
 
-rootProject.name = "AliucordPlugins"
+rootProject.name = "AliucordPlugins2"

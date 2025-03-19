@@ -234,6 +234,7 @@ class CatboxUploader : Plugin() {
         try {
             return future.get(15, TimeUnit.SECONDS)
         } catch (e: Exception) {
+            // Fix: Use e as the cause exception (Throwable), not as a message
             throw IOException("Upload timed out or failed", e)
         } finally {
             // Try to delete the temp file

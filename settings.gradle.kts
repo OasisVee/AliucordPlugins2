@@ -20,5 +20,6 @@ include(":EmojiUtility")
 include(":Hastebin")
 include(":UrbanDictionary")
 include(":JsEval")
+include(":CatboxUploader")
 
 rootProject.name = "AliucordPlugins2"

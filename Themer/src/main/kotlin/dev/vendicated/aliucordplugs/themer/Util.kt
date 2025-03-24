@@ -38,10 +38,8 @@ fun JSONObject.toColorArray() = ArrayList<ColorTuple>().apply {
 }
 
 fun verifyUntrustedUrl(url: String) {
-    val regex = "https?://.*".toRegex()
-    if (!regex.matches(url)) {
+    if (!ALLOWED_RESOURCE_DOMAINS_PATTERN.matcher(url).find())
         throw IllegalArgumentException(
-            "URL $url is not a direct link. Please use a valid URL."
+            "URL $url is not allowed. Please use one of: >> ${ALLOWED_RESOURCE_DOMAINS.joinToString()} <<"
         )
-    }
 }

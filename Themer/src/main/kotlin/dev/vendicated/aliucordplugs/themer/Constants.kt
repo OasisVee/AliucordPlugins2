@@ -33,26 +33,7 @@ val THEME_DIR = File(Constants.BASE_PATH, "themes")
 const val BLOCKED_COLOR_DARK = 0xff34373c.toInt()
 const val BLOCKED_COLOR_LIGHT = 0xfffcfcfc.toInt()
 
-// Credit for these colours to both https://github.com/Aliucord/DiscordThemer
-// and https://github.com/GangsterFox/AliuFox-themes/blob/main/ThemerDocu.md
-
-val ALLOWED_RESOURCE_DOMAINS = arrayOf(
-    "github.com",
-    "raw.githubusercontent.com",
-    "gitlab.com",
-    "i.imgur.com",
-    "i.ibb.co", // only for you, FrozenPhoton
-    "files.catbox.moe",
-    "file.garden",
-)
-
-val ALLOWED_RESOURCE_DOMAINS_PATTERN: Pattern by lazy {
-    val domains = ALLOWED_RESOURCE_DOMAINS.joinToString(
-        separator = "|",
-        transform = { Pattern.quote(it) }
-    )
-    Pattern.compile("^https://(www)?($domains)/")
-}
+// The ALLOWED_RESOURCE_DOMAINS and ALLOWED_RESOURCE_DOMAINS_PATTERN variables have been removed to allow any direct URL
 
 val THEME_KEYS = arrayOf(
     "manifest",

@@ -37,13 +37,14 @@ const val BLOCKED_COLOR_LIGHT = 0xfffcfcfc.toInt()
 // and https://github.com/GangsterFox/AliuFox-themes/blob/main/ThemerDocu.md
 
 val ALLOWED_RESOURCE_DOMAINS = arrayOf(
-    "github.com",
-    "raw.githubusercontent.com",
-    "gitlab.com",
-    "i.imgur.com",
-    "i.ibb.co", // only for you, FrozenPhoton
-    "files.catbox.moe",
     "file.garden",
+    "files.catbox.moe",
+    "github.com",
+    "gitlab.com",
+    "i.ibb.co",
+    "i.imgur.com",
+    "raw.githubusercontent.com",
+    "wallpaperaccess.com",
 )
 
 val ALLOWED_RESOURCE_DOMAINS_PATTERN: Pattern by lazy {

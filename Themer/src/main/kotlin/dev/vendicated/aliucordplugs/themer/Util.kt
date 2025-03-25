@@ -38,8 +38,8 @@ fun JSONObject.toColorArray() = ArrayList<ColorTuple>().apply {
 }
 
 fun verifyUntrustedUrl(url: String) {
-    // This function now does nothing, effectively removing the domain check
-    // No throwing of exceptions based on URL domains
-    return
-}
+    if (!ALLOWED_RESOURCE_DOMAINS_PATTERN.matcher(url).find())
+        throw IllegalArgumentException(
+            "URL $url is not allowed. Please use one of: >> ${ALLOWED_RESOURCE_DOMAINS.joinToString()} <<"
+        )
 }

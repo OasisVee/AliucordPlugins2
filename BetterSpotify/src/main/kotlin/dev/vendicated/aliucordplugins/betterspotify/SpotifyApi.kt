@@ -27,7 +27,7 @@ import kotlin.math.abs
 
 private const val baseUrl = "https://api.spotify.com/v1/me/player"
 
-// The spotify api gives me brain damage i swear to god
+// The spotify api gives me fucking brain damage i swear to god
 // You can either specify album or playlist uris as "context_uri" String or track uris as "uris" array
 @Suppress("Unused")
 class SongBody(val uris: List<String>, val position_ms: Int = 0)
@@ -88,10 +88,11 @@ object SpotifyApi {
                     request.execute()
                 }
                 
-                if (response.isOk) {
+                try {
+                    response.assertOk()
                     cb?.invoke(response)
-                } else {
-                    handleErrorResponse(response, endpoint, method, data, cb)
+                } catch (e: Http.HttpException) {
+                    handleHttpException(e, endpoint, method, data, cb)
                 }
             } catch (th: Throwable) {
                 logger.error("Exception in Spotify API request", th)
@@ -101,22 +102,6 @@ object SpotifyApi {
                     BetterSpotify.stopListening(skipToast = true)
                     logger.errorToast("Unexpected error with Spotify API request", th)
                 }
-            }
-        }
-    }
-    
-    private fun handleErrorResponse(response: Http.Response, endpoint: String, method: String, data: Any?, cb: ((Http.Response) -> Unit)?) {
-        when (response.statusCode) {
-            401 -> handleUnauthorized(endpoint, method, data, cb)
-            404 -> {
-                BetterSpotify.stopListening(skipToast = true)
-                logger.errorToast("Failed to play. Make sure your Spotify is running and active")
-            }
-            429 -> {
-                logger.errorToast("Rate limited by Spotify API. Please try again later")
-            }
-            else -> {
-                logger.errorToast("Spotify API error: ${response.statusCode}")
             }
         }
     }

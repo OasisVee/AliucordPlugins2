@@ -40,31 +40,17 @@ object SpotifyApi {
     private var token: String? = null
     private fun getToken(): String? {
         if (token == null) {
-            try {
-                // First try to get token from Discord's header provider
-                token = RestAPI.AppHeadersProvider.INSTANCE.spotifyToken
-
-                // If that fails, try to get it via connection access token
-                if (token == null) {
-                    val accountId = ReflectUtils.getField(client, "spotifyAccountId") as? String
-                    if (accountId != null) {
-                        val (res, err) = RestAPI.api
-                            .getConnectionAccessToken(Platform.SPOTIFY.name.lowercase(), accountId)
-                            .await()
-                        
-                        if (err != null) {
-                            logger.error("Failed to get Spotify access token", err)
-                        } else {
-                            token = res?.accessToken
-                        }
-                    } else {
-                        logger.error("Failed to get Spotify account ID")
-                    }
+            token = RestAPI.AppHeadersProvider.INSTANCE.spotifyToken
+                ?: try {
+                    val accountId = ReflectUtils.getField(client, "spotifyAccountId")
+                    val (res, err) = RestAPI.api
+                        .getConnectionAccessToken(Platform.SPOTIFY.name.lowercase(), accountId as String)
+                        .await()
+                    err?.let { throw it }
+                    res!!.accessToken
+                } catch (th: Throwable) {
+                    null
                 }
-            } catch (th: Throwable) {
-                logger.error("Exception while getting Spotify token", th)
-                token = null
-            }
         }
         return token
     }
@@ -73,91 +59,59 @@ object SpotifyApi {
     private fun request(endpoint: String, method: String = "PUT", data: Any? = null, cb: ((Http.Response) -> Unit)? = null) {
         Utils.threadPool.execute {
             val token = getToken() ?: run {
-                Utils.showToast("Failed to get Spotify token from Discord. Make sure your Spotify is running and connected to Discord.")
+                Utils.showToast("Failed to get Spotify token from Discord. Make sure your spotify is running.")
                 return@execute
             }
 
             try {
-                val request = Http.Request("$baseUrl/$endpoint", method)
+                Http.Request("$baseUrl/$endpoint", method)
                     .setHeader("Authorization", "Bearer $token")
-                    .setHeader("Content-Type", "application/json")
-                
-                val response = if (data != null) {
-                    request.executeWithJson(data)
-                } else {
-                    request.execute()
-                }
-                
-                try {
-                    response.assertOk()
-                    cb?.invoke(response)
-                } catch (e: Http.HttpException) {
-                    handleHttpException(e, endpoint, method, data, cb)
-                }
+                    .use {
+                        val res =
+                            if (data != null)
+                                it.executeWithJson(data)
+                            else
+                                it
+                                    .setHeader("Content-Type", "application/json")
+                                    .execute()
+
+                        res.assertOk()
+                        cb?.invoke(res)
+                    }
             } catch (th: Throwable) {
-                logger.error("Exception in Spotify API request", th)
                 if (th is Http.HttpException) {
-                    handleHttpException(th, endpoint, method, data, cb)
-                } else {
-                    BetterSpotify.stopListening(skipToast = true)
-                    logger.errorToast("Unexpected error with Spotify API request", th)
+                    when (th.statusCode) {
+                        401 -> {
+                            if (!didTokenRefresh) {
+                                didTokenRefresh = true
+                                SpotifyApiClient.`access$refreshSpotifyToken`(client)
+                                this.token = null
+                                RxUtils.timer(5, TimeUnit.SECONDS).subscribe(
+                                    createActionSubscriber({
+                                        request(endpoint, method, data, cb)
+                                    })
+                                )
+                            } else {
+                                BetterSpotify.stopListening(skipToast = true)
+                                logger.errorToast("Got \"Unauthorized\" Error. Try relinking Spotify")
+                            }
+                            return@execute
+                        }
+                        404 -> {
+                            BetterSpotify.stopListening(skipToast = true)
+                            logger.errorToast("Failed to play. Make sure your Spotify is running", th)
+                            return@execute
+                        }
+                    }
+                    logger.errorToast("Failed to play that song :( Check the debug log", th)
                 }
             }
-        }
-    }
-    
-    private fun handleHttpException(ex: Http.HttpException, endpoint: String, method: String, data: Any?, cb: ((Http.Response) -> Unit)?) {
-        when (ex.statusCode) {
-            401 -> handleUnauthorized(endpoint, method, data, cb)
-            404 -> {
-                BetterSpotify.stopListening(skipToast = true)
-                logger.errorToast("Failed to play. Make sure your Spotify is running and active")
-            }
-            429 -> {
-                logger.errorToast("Rate limited by Spotify API. Please try again later")
-            }
-            else -> {
-                BetterSpotify.stopListening(skipToast = true)
-                logger.errorToast("Failed to play that song (${ex.statusCode}). Check the debug log", ex)
-            }
-        }
-    }
-    
-    private fun handleUnauthorized(endpoint: String, method: String, data: Any?, cb: ((Http.Response) -> Unit)?) {
-        if (!didTokenRefresh) {
-            didTokenRefresh = true
-            token = null
-            
-            try {
-                SpotifyApiClient.`access$refreshSpotifyToken`(client)
-                
-                // Retry after a delay
-                RxUtils.timer(3, TimeUnit.SECONDS).subscribe(
-                    createActionSubscriber({
-                        didTokenRefresh = false  // Reset the flag so we can try refreshing again if needed
-                        request(endpoint, method, data, cb)
-                    })
-                )
-            } catch (refreshError: Throwable) {
-                logger.error("Failed to refresh Spotify token", refreshError)
-                BetterSpotify.stopListening(skipToast = true)
-                logger.errorToast("Authentication failed. Try relinking Spotify in Discord settings")
-            }
-        } else {
-            BetterSpotify.stopListening(skipToast = true)
-            logger.errorToast("Spotify authentication failed after refresh attempt. Try relinking Spotify in Discord settings")
         }
     }
 
     fun getPlayerInfo(cb: (PlayerInfo) -> Unit) {
-        request("", "GET", cb = { response ->
-            try {
-                val playerInfo = response.json(PlayerInfo::class.java)
-                cb.invoke(playerInfo)
-            } catch (e: Exception) {
-                logger.error("Failed to parse player info", e)
-                Utils.showToast("Failed to get player info from Spotify")
-            }
+        request("", "GET", cb = {
+            cb.invoke(it.json(PlayerInfo::class.java))
         })
     }
 
@@ -174,12 +128,11 @@ object SpotifyApi {
     }
 
     fun seek(position_ms: Int) {
-        getPlayerInfo { info ->
-            if (!info.is_playing) {
-                playSong(info.item.id, position_ms)
-            } else if (abs(info.progress_ms - position_ms) > 5000) {
+        getPlayerInfo {
+            if (!it.is_playing)
+                playSong(it.item.id, position_ms)
+            else if (abs(it.progress_ms - position_ms) > 5000)
                 request("seek?position_ms=$position_ms")
-            }
         }
     }
 }
